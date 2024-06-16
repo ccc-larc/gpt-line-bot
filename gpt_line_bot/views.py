@@ -100,7 +100,7 @@ def ask_openai_assistant(line_user_id: str, content: str) -> str:
 
 
 def get_or_create_openai_thread_id(line_user_id: str):
-    user_thread = UserThread.objects.get(line_user_id=line_user_id)
+    user_thread = UserThread.objects.filter(line_user_id=line_user_id).first()
     if user_thread:
         try:
             thread = openai_client.beta.threads.retrieve(user_thread.openai_thread_id)
