@@ -1,4 +1,5 @@
 import logging
+import time
 
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
@@ -14,12 +15,21 @@ from linebot.v3.messaging import (
     TextMessage,
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
+from openai import NotFoundError, OpenAI
+
+from gpt_line_bot.models import UserThread
 
 logger = logging.getLogger(__name__)
 
 handler = WebhookHandler(settings.LINE_CHANNEL_SECRET)
 
 configuration = Configuration(access_token=settings.LINE_CHANNEL_ACCESS_TOKEN)
+
+openai_client = OpenAI(
+    api_key=settings.OPENAI_API_KEY,
+    organization=settings.OPENAI_ORGANIZATION_ID,
+    project=settings.OPENAI_PROJECT_ID,
+)
 
 
 @csrf_exempt
@@ -45,11 +55,79 @@ def line_bot_webhook(request):
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
+    answer = ask_openai_assistant(line_user_id=event.source.user_id, content=event.message.text)
+
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message_with_http_info(
             ReplyMessageRequest(
                 reply_token=event.reply_token,
-                messages=[TextMessage(text=event.message.text)]
+                messages=[TextMessage(text=answer)]
             )
         )
+
+
+def ask_openai_assistant(line_user_id: str, content: str) -> str:
+    thread_id = get_or_create_openai_thread_id(line_user_id)
+
+    openai_client.beta.threads.messages.create(
+        thread_id,
+        role='user',
+        content=content,
+    )
+
+    status = create_run_and_wait_completed(thread_id)
+    if status != 'completed':
+        return '很抱歉，我在尋找答案時遇到了錯誤，或許您可以換個方式再問一次。'
+
+    messages = openai_client.beta.threads.messages.list(thread_id)
+    msg = messages.data[-1]
+    content = msg.content[0]
+    if content.type == 'text':
+        return content.text
+    else:
+        return '很抱歉，我在處理回應時遇到了錯誤，或許您可以換個方式再問一次。'
+
+
+def get_or_create_openai_thread_id(line_user_id: str):
+    user_thread = UserThread.objects.get(line_user_id=line_user_id)
+    if user_thread:
+        try:
+            thread = openai_client.beta.threads.retrieve(user_thread.openai_thread_id)
+            return thread.id
+        except NotFoundError:
+            UserThread.objects.filter(id=user_thread.id).delete()
+
+    thread = openai_client.beta.threads.create()
+    UserThread.objects.create(
+        line_user_id=line_user_id,
+        openai_thread_id=thread.id,
+    )
+    return thread.id
+
+
+def create_run_and_wait_completed(thread_id: str) -> str:
+    assistant_run = openai_client.beta.threads.runs.create(
+        thread_id=thread_id,
+        assistant_id=settings.OPENAI_ASSISTANT_ID,
+    )
+
+    status = assistant_run.status
+
+    while status != 'completed':
+        if status == 'queued':
+            wait_seconds = 5
+        elif status == 'failed':
+            break
+        else:
+            wait_seconds = 3
+
+        time.sleep(wait_seconds)
+
+        run = openai_client.beta.threads.runs.retrieve(
+            thread_id=thread_id,
+            run_id=assistant_run.id,
+        )
+        status = run.status
+
+    return status
