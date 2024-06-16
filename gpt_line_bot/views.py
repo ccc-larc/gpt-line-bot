@@ -134,7 +134,7 @@ def create_run_and_wait_completed(thread_id: str) -> str:
         elif status == 'failed':
             break
         else:
-            wait_seconds = 1
+            wait_seconds = 0.3
 
         time.sleep(wait_seconds)
 
