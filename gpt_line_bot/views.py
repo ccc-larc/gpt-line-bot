@@ -91,10 +91,10 @@ def ask_openai_assistant(line_user_id: str, content: str) -> str:
 
     logger.info(f'OpenAI messages: {messages}')
 
-    msg = messages.data[-1]
+    msg = messages.data[0]
     content = msg.content[0]
     if content.type == 'text':
-        return content.text
+        return content.text.value
     else:
         return '很抱歉，我在處理回應時遇到了錯誤，或許您可以換個方式再問一次。'
 
