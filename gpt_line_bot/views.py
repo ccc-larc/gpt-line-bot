@@ -130,11 +130,11 @@ def create_run_and_wait_completed(thread_id: str) -> str:
         logger.info(f'OpenAI run status: {status}')
 
         if status == 'queued':
-            wait_seconds = 3
+            wait_seconds = 1
         elif status == 'failed':
             break
         else:
-            wait_seconds = 2
+            wait_seconds = 1
 
         time.sleep(wait_seconds)
 
