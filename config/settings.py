@@ -138,16 +138,16 @@ LOGGING = {
             'class': 'logging.StreamHandler',
         },
     },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
-    },
     'loggers': {
         'django': {
             'handlers': ['console'],
             'level': 'INFO',
-            'propagate': True,
+            'propagate': False,
         },
+        'gpt_line_bot': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        }
     },
 }
 
