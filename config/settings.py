@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'rest_framework',
+
+    'gpt_line_bot',
 ]
 
 MIDDLEWARE = [
@@ -140,3 +142,7 @@ LOGGING = {
         'level': 'INFO',
     },
 }
+
+# Line bot settings
+LINE_CHANNEL_SECRET = env('LINE_CHANNEL_SECRET')
+LINE_CHANNEL_ACCESS_TOKEN = env('LINE_CHANNEL_ACCESS_TOKEN')
