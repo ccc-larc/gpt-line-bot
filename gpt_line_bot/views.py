@@ -47,7 +47,7 @@ def line_bot_webhook(request):
         handler.handle(body, signature)
     except InvalidSignatureError:
         error_message = 'Invalid signature. Please check your channel access token/channel secret.'
-        logger.info(error_message)
+        logger.error(error_message)
         return HttpResponseBadRequest(error_message)
 
     return HttpResponse('OK')
@@ -55,7 +55,14 @@ def line_bot_webhook(request):
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
-    answer = ask_openai_assistant(line_user_id=event.source.user_id, content=event.message.text)
+    line_user_id = event.source.user_id
+    content = event.message.text
+
+    logger.info(f'LINE user [{line_user_id}]: {content}')
+
+    answer = ask_openai_assistant(line_user_id=line_user_id, content=content)
+
+    logger.info(f'OpenAI answer: {answer}')
 
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
@@ -81,6 +88,9 @@ def ask_openai_assistant(line_user_id: str, content: str) -> str:
         return '很抱歉，我在尋找答案時遇到了錯誤，或許您可以換個方式再問一次。'
 
     messages = openai_client.beta.threads.messages.list(thread_id)
+
+    logger.info(f'OpenAI messages: {messages}')
+
     msg = messages.data[-1]
     content = msg.content[0]
     if content.type == 'text':
@@ -94,6 +104,7 @@ def get_or_create_openai_thread_id(line_user_id: str):
     if user_thread:
         try:
             thread = openai_client.beta.threads.retrieve(user_thread.openai_thread_id)
+            logger.info(f'Use existed OpenAI thread: {thread}')
             return thread.id
         except NotFoundError:
             UserThread.objects.filter(id=user_thread.id).delete()
@@ -103,6 +114,7 @@ def get_or_create_openai_thread_id(line_user_id: str):
         line_user_id=line_user_id,
         openai_thread_id=thread.id,
     )
+    logger.info(f'Create new OpenAI thread: {thread}')
     return thread.id
 
 
@@ -115,6 +127,8 @@ def create_run_and_wait_completed(thread_id: str) -> str:
     status = assistant_run.status
 
     while status != 'completed':
+        logger.info(f'OpenAI run status: {status}')
+
         if status == 'queued':
             wait_seconds = 5
         elif status == 'failed':
